@@ -1,29 +1,17 @@
 <script lang="ts">
-	import { onDestroy } from 'svelte';
+	import { onDestroy, onMount } from 'svelte';
+	import WfcSudokuCell from '../components/WFCSudokuCell.svelte';
+	import type { WFCGridCell } from '$lib/wfc';
+	import { isSolvable } from '$lib/backtracking';
+	import InputSudokuCell from '../components/InputSudokuCell.svelte';
 
-	type WFCGridCell = {
-		x: number;
-		y: number;
-		value: number | null;
-		possibleValues: number[];
-	};
-
+	let userDefinedGrid: number[][] = [];
+	let baseGrid: WFCGridCell[][] = [];
 	let grid: WFCGridCell[][] = [];
 
 	let interval: number;
 
-	for (let y = 0; y < 9; y++) {
-		let row: WFCGridCell[] = [];
-		for (let x = 0; x < 9; x++) {
-			row.push({
-				x,
-				y,
-				value: null,
-				possibleValues: [1, 2, 3, 4, 5, 6, 7, 8, 9]
-			});
-		}
-		grid.push(row);
-	}
+	let editing = false;
 
 	const numberInSame3x3 = (
 		cell1X: number,
@@ -52,7 +40,7 @@
 
 			if (lowestEntropy === 0) {
 				console.log('Retrying...');
-				reset();
+				// resetToUserDefined();
 				solve();
 				return;
 			}
@@ -113,20 +101,52 @@
 		return { cells, lowestEntropy };
 	};
 
-	const reset = () => {
+	// const resetToUserDefined = () => {
+	// 	clearInterval(interval);
+
+	// 	for (let y = 0; y < grid.length; y++) {
+	// 		for (let x = 0; x < grid[y].length; x++) {
+	// 			grid[y][x].value = userDefinedGrid[y][x].value;
+	// 			grid[y][x].possibleValues = [...userDefinedGrid[y][x].possibleValues];
+	// 		}
+	// 	}
+	// };
+
+	const resetGrid = (grid: WFCGridCell[][]) => {
 		clearInterval(interval);
 
-		for (let y = 0; y < grid.length; y++) {
-			for (let x = 0; x < grid[y].length; x++) {
-				grid[y][x].value = null;
-				grid[y][x].possibleValues = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+		for (let y = 0; y < 9; y++) {
+			let row: WFCGridCell[] = [];
+			for (let x = 0; x < 9; x++) {
+				row.push({
+					x,
+					y,
+					value: null,
+					possibleValues: [1, 2, 3, 4, 5, 6, 7, 8, 9]
+				});
 			}
+			grid.push(row);
+		}
+	};
+
+	const resetUserDefined = () => {
+		userDefinedGrid = [];
+		for (let y = 0; y < 9; y++) {
+			let row: number[] = [];
+			for (let x = 0; x < 9; x++) {
+				row.push(0);
+			}
+			userDefinedGrid.push(row);
 		}
 	};
 
 	onDestroy(() => {
 		clearInterval(interval);
 	});
+
+	resetGrid(grid);
+	resetUserDefined();
+	// resetGrid(userDefinedGrid);
 </script>
 
 <div class="flex min-h-screen w-full flex-col items-center justify-center space-y-8">
@@ -134,49 +154,67 @@
 		<p class="text-4xl font-thin">Wave Function Collapse</p>
 		<p class="text-6xl font-thin">Sudoku</p>
 	</div>
-	<div class="grid-cols-9 border-b border-r border-black">
-		{#each grid as row}
+	<div class="grid-cols-9 border-b-2 border-r-2 border-black">
+		{#each grid as row, y}
 			<div class="grid grid-cols-9">
-				{#each row as cell}
-					{#if cell.value === null}
-						<div
-							class="flex h-16 w-16 items-center justify-center border-l border-t border-black text-center font-thin"
-							style={`display: grid; grid-template-columns: repeat(${Math.ceil(Math.sqrt(cell.possibleValues.length))}, 1fr); font-size: ${Math.ceil(Math.sqrt(cell.possibleValues.length)) === 3 ? 14 : 18}px;`}
-						>
-							{#each cell.possibleValues as number}
-								<button
-									class="flex items-center justify-center"
-									on:click={() => {
-										setValue(cell, number);
-									}}
-								>
-									{number}
-								</button>
-							{/each}
-						</div>
+				{#each row as cell, x}
+					{#if !editing}
+						<WfcSudokuCell {cell} />
 					{:else}
-						<div
-							class="flex h-16 w-16 items-center justify-center border-l border-t border-black text-center text-4xl font-thin"
-						>
-							{cell.value || cell.possibleValues[0]}
-						</div>
+						<InputSudokuCell grid={userDefinedGrid} {x} {y} />
 					{/if}
 				{/each}
 			</div>
 		{/each}
 	</div>
 	<div class="flex flex-row items-center justify-center space-x-4">
-		<button
-			class="rounded border border-black px-4 py-1 font-thin hover:bg-black hover:font-extralight hover:text-white"
-			on:click={solve}
-		>
-			Solve
-		</button>
-		<button
-			class="rounded border border-black px-4 py-1 font-thin hover:bg-black hover:font-extralight hover:text-white"
-			on:click={reset}
-		>
-			Reset
-		</button>
+		{#if !editing}
+			<button
+				class="rounded border border-black px-4 py-1 font-thin hover:bg-black hover:font-extralight hover:text-white"
+				on:click={solve}
+			>
+				Solve
+			</button>
+			<button
+				class="rounded border border-black px-4 py-1 font-thin hover:bg-black hover:font-extralight hover:text-white"
+				on:click={() => {}}
+			>
+				Reset
+			</button>
+			<button
+				class="rounded border border-black px-4 py-1 font-thin hover:bg-black hover:font-extralight hover:text-white"
+				on:click={() => {
+					editing = !editing;
+				}}
+			>
+				Edit
+			</button>
+		{:else}
+			<button
+				class="rounded border border-black px-4 py-1 font-thin hover:bg-black hover:font-extralight hover:text-white"
+				on:click={() => {
+					console.log('Confirm');
+					console.log('Is this solvable?:', isSolvable(userDefinedGrid));
+				}}
+			>
+				Confirm
+			</button>
+			<button
+				class="rounded border border-black px-4 py-1 font-thin hover:bg-black hover:font-extralight hover:text-white"
+				on:click={() => {
+					console.log('Cancel');
+				}}
+			>
+				Cancel
+			</button>
+			<button
+				class="rounded border border-black px-4 py-1 font-thin hover:bg-black hover:font-extralight hover:text-white"
+				on:click={() => {
+					console.log('Undo');
+				}}
+			>
+				Undo
+			</button>
+		{/if}
 	</div>
 </div>
