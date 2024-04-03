@@ -2,6 +2,9 @@
 	import type { WFCGridCell } from '$lib/wfc';
 
 	export let cell: WFCGridCell;
+	export let solverRunning: boolean;
+
+	export let setBaseGridValue: (x: number, y: number, value: number) => void;
 </script>
 
 {#if cell.value === null}
@@ -10,9 +13,15 @@
 		style={`display: grid; grid-template-columns: repeat(${Math.ceil(Math.sqrt(cell.possibleValues.length))}, 1fr); font-size: ${Math.ceil(Math.sqrt(cell.possibleValues.length)) === 3 ? 14 : 18}px; border-left: ${cell.x % 3 === 0 ? 2 : 1}px black solid; border-top: ${cell.y % 3 === 0 ? 2 : 1}px black solid;`}
 	>
 		{#each cell.possibleValues as number}
-			<p class="flex items-center justify-center">
+			<button
+				class="flex items-center justify-center"
+				disabled={solverRunning}
+				on:click={() => {
+					setBaseGridValue(cell.x, cell.y, number);
+				}}
+			>
 				{number}
-			</p>
+			</button>
 		{/each}
 	</div>
 {:else}

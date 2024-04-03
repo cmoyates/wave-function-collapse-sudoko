@@ -1,11 +1,14 @@
 <script lang="ts">
 	import type { WFCGridCell } from '$lib/wfc';
 	import WfcSudokuGrid from '../components/WFCSudokuGrid.svelte';
+	import '../slider.css';
 
-	const timeStep = 10;
+	let timeStep = 0;
 
 	let baseGrid: WFCGridCell[][] = [];
 	let workingGrid: WFCGridCell[][] = [];
+
+	let solverRunning = false;
 
 	// Init working grid
 	for (let y = 0; y < 9; y++) {
@@ -33,63 +36,57 @@
 		}
 		baseGrid.push(row);
 	}
-
+	/** Sleep function: https://stackoverflow.com/questions/951021/what-is-the-javascript-version-of-sleep#answer-39914235 */
 	const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-	const recalculateCellPossibleValues = (cell: WFCGridCell) => {
-		for (let y = 0; y < workingGrid.length; y++) {
-			for (let x = 0; x < workingGrid[y].length; x++) {
-				const cell = workingGrid[y][x];
-				if (cell.value !== null) {
-					cell.possibleValues = [];
-					continue;
-				}
+	const recalculateCellPossibleValues = (grid: WFCGridCell[][], cell: WFCGridCell) => {
+		if (cell.value !== null) {
+			cell.possibleValues = [];
+			return;
+		}
 
-				cell.possibleValues = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+		cell.possibleValues = [1, 2, 3, 4, 5, 6, 7, 8, 9];
 
-				// Check row
-				for (let i = 0; i < 9; i++) {
-					cell.possibleValues = cell.possibleValues.filter(
-						(possibleValue) => possibleValue !== workingGrid[y][i].value
-					);
-				}
+		// Check row
+		for (let i = 0; i < 9; i++) {
+			cell.possibleValues = cell.possibleValues.filter(
+				(possibleValue) => possibleValue !== grid[cell.y][i].value
+			);
+		}
 
-				// Check column
-				for (let i = 0; i < 9; i++) {
-					cell.possibleValues = cell.possibleValues.filter(
-						(possibleValue) => possibleValue !== workingGrid[i][x].value
-					);
-				}
+		// Check column
+		for (let i = 0; i < 9; i++) {
+			cell.possibleValues = cell.possibleValues.filter(
+				(possibleValue) => possibleValue !== grid[i][cell.x].value
+			);
+		}
 
-				// Check 3x3
-				const cell3x3X = Math.floor(x / 3);
-				const cell3x3Y = Math.floor(y / 3);
-				for (let y = 0; y < 3; y++) {
-					for (let x = 0; x < 3; x++) {
-						cell.possibleValues = cell.possibleValues.filter(
-							(possibleValue) =>
-								possibleValue !== workingGrid[y + cell3x3Y * 3][x + cell3x3X * 3].value
-						);
-					}
-				}
+		// Check 3x3
+		const cell3x3X = Math.floor(cell.x / 3);
+		const cell3x3Y = Math.floor(cell.y / 3);
+		for (let y = 0; y < 3; y++) {
+			for (let x = 0; x < 3; x++) {
+				cell.possibleValues = cell.possibleValues.filter(
+					(possibleValue) => possibleValue !== grid[y + cell3x3Y * 3][x + cell3x3X * 3].value
+				);
 			}
 		}
 	};
 
-	const recalculateConnectedCellPossibleValues = (cell: WFCGridCell) => {
+	const recalculateConnectedCellPossibleValues = (grid: WFCGridCell[][], cell: WFCGridCell) => {
 		// Row
 		for (let i = 0; i < 9; i++) {
-			const connectedCell = workingGrid[cell.y][i];
+			const connectedCell = grid[cell.y][i];
 			if (connectedCell.value === null) {
-				recalculateCellPossibleValues(connectedCell);
+				recalculateCellPossibleValues(grid, connectedCell);
 			}
 		}
 
 		// Column
 		for (let i = 0; i < 9; i++) {
-			const connectedCell = workingGrid[i][cell.x];
+			const connectedCell = grid[i][cell.x];
 			if (connectedCell.value === null) {
-				recalculateCellPossibleValues(connectedCell);
+				recalculateCellPossibleValues(grid, connectedCell);
 			}
 		}
 
@@ -98,18 +95,45 @@
 		const cell3x3Y = Math.floor(cell.y / 3);
 		for (let y = 0; y < 3; y++) {
 			for (let x = 0; x < 3; x++) {
-				const connectedCell = workingGrid[y + cell3x3Y * 3][x + cell3x3X * 3];
+				const connectedCell = grid[y + cell3x3Y * 3][x + cell3x3X * 3];
 				if (connectedCell.value === null) {
-					recalculateCellPossibleValues(connectedCell);
+					recalculateCellPossibleValues(grid, connectedCell);
 				}
 			}
 		}
 	};
 
+	const setBaseGridValue = (x: number, y: number, value: number) => {
+		baseGrid[y][x].value = value;
+		baseGrid[y][x].possibleValues = [];
+
+		console.log('Setting base grid value', x, y, value);
+
+		recalculateConnectedCellPossibleValues(baseGrid, baseGrid[y][x]);
+
+		resetWorkingGridToBaseGrid();
+
+		console.log('Base grid', baseGrid);
+		console.log('Working grid', workingGrid);
+	};
+
+	const setTimeStep = (
+		event: Event & {
+			currentTarget: EventTarget & HTMLInputElement;
+		}
+	) => {
+		timeStep = parseInt(event.currentTarget.value);
+	};
+
 	const startSolve = async () => {
+		if (solverRunning) {
+			return;
+		}
+		solverRunning = true;
 		await solveStep();
 		console.log('Complete');
 		let solved = isSolved(workingGrid);
+		solverRunning = false;
 		if (solved) {
 			console.log('The puzzle has been solved!');
 		} else {
@@ -164,7 +188,7 @@
 		while (cell.possibleValues.length !== 0) {
 			const value = cell.possibleValues[Math.floor(Math.random() * cell.possibleValues.length)];
 
-			console.log(`Trying ${value} at ${cell.x}, ${cell.y}`);
+			// console.log(`Trying ${value} at ${cell.x}, ${cell.y}`);
 
 			if (!isMoveValid(workingGrid, cell.x, cell.y, value)) {
 				workingGrid[cell.y][cell.x].possibleValues = workingGrid[cell.y][
@@ -176,7 +200,7 @@
 
 			cell.value = value;
 			workingGrid[cell.y][cell.x] = cell;
-			recalculateConnectedCellPossibleValues(cell);
+			recalculateConnectedCellPossibleValues(workingGrid, cell);
 
 			await sleep(timeStep);
 
@@ -189,7 +213,7 @@
 
 			await sleep(timeStep);
 
-			console.log(`Removing ${value} at ${cell.x}, ${cell.y}`);
+			// console.log(`Removing ${value} at ${cell.x}, ${cell.y}`);
 
 			possibleValues = possibleValues.filter((possibleValue) => possibleValue !== value);
 			cell.possibleValues = possibleValues.slice();
@@ -199,7 +223,7 @@
 			workingGrid[cell.y][cell.x] = cell;
 		}
 
-		recalculateConnectedCellPossibleValues(cell);
+		recalculateConnectedCellPossibleValues(workingGrid, cell);
 		return false;
 	};
 
@@ -259,9 +283,9 @@
 <div class="flex min-h-screen w-full flex-col items-center justify-center space-y-8">
 	<div class="flex flex-col items-center justify-center">
 		<p class="text-4xl font-thin">Wave Function Collapse</p>
-		<p class="text-6xl font-thin">Sudoku</p>
+		<p class="-mr-2 text-center text-6xl font-thin tracking-[8px]">Sudoku</p>
 	</div>
-	<WfcSudokuGrid {workingGrid} />
+	<WfcSudokuGrid {workingGrid} {solverRunning} {setBaseGridValue} />
 	<div class="flex flex-row items-center justify-center space-x-4">
 		<button
 			class="rounded border border-black px-4 py-1 font-thin hover:bg-black hover:font-extralight hover:text-white"
@@ -275,5 +299,17 @@
 		>
 			Reset
 		</button>
+		<div class="justify- -mt-2 flex flex-col items-center font-thin">
+			<p class="mb-1 text-sm">Timestep: {timeStep}ms</p>
+			<input
+				type="range"
+				style=""
+				min={0}
+				max={1000}
+				step={50}
+				value={timeStep}
+				on:input={setTimeStep}
+			/>
+		</div>
 	</div>
 </div>
