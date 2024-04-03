@@ -1,1 +1,1 @@
-# Wave Function Collapse Sudoko
+# Wave Function Collapse Sudoku
